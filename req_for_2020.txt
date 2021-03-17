@@ -10,7 +10,7 @@ graphviz==0.8.4
 grpcio==1.36.1
 h5py==2.10.0
 idna==2.10
-importlib-metadata==3.7.2
+importlib-metadata==3.7.3
 Keras-Applications==1.0.8
 Keras-Preprocessing==1.1.2
 Markdown==3.3.4
@@ -19,7 +19,7 @@ networkx==2.5
 numpy==1.18.5
 onnx==1.8.1
 opt-einsum==3.3.0
-protobuf==3.15.5
+protobuf==3.6.1
 PyYAML==5.4.1
 requests==2.25.1
 six==1.15.0
@@ -27,9 +27,8 @@ tensorboard==1.15.0
 tensorflow==1.15.5
 tensorflow-estimator==1.15.1
 termcolor==1.1.0
-test-generator==0.1.1
 typing-extensions==3.7.4.3
-urllib3==1.26.3
+urllib3==1.26.4
 Werkzeug==1.0.1
 wrapt==1.12.1
 zipp==3.4.1
