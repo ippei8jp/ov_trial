@@ -16,7 +16,26 @@ else:
     # これを設定されてない変数に対して行うと例外を吐くので注意
     pass
 
+# openvino.inference_engine のバージョン取得
+from openvino.inference_engine import get_version as ov_get_version
+ov_vession_str = ov_get_version()
+# print(ov_vession_str)               # バージョン2019には '2.1.custom_releases/2019/R～'という文字列が入っている
+                                    # バージョン2020には '～-releases/2020/～'という文字列が入っている
+                                    # バージョン2021には '～-releases/2021/～'という文字列が入っている
+
+# バージョン判定
+if "/2019/R" in ov_vession_str :
+    ov_vession = 2019           # 2019.*
+elif "releases/2020/" in ov_vession_str :
+    ov_vession = 2020           # 2020.*
+else :
+    ov_vession = 2021           # デフォルト2021
+
 from openvino.inference_engine import IENetwork, IECore
+
+if ov_vession >= 2021 : 
+    # バージョン2021以降はngraphを使用
+    import ngraph
 
 # 表示フレームクラス ==================================================================
 class DisplayFrame() :
@@ -165,7 +184,18 @@ def parse_result(net, res, disp_frame, request_id, labels_map, prob_threshold, f
     # https://docs.openvinotoolkit.org/2019_R1/_pedestrian_and_vehicle_detector_adas_0001_description_pedestrian_and_vehicle_detector_adas_0001.html
     # の「outputs」を参照
     
-    for obj in res[out_blob][0][0]:     # 例：このループは200回まわる
+    # for obj in res[out_blob][0][0]:     # 例：このループは200回まわる
+    '''
+    if isinstance(res[out_blob], np.ndarray) :      # 2020以前のバージョン
+        res_array = res[out_blob][0][0]
+    else :                                          # 2021以降のバージョン
+        res_array = res[out_blob].buffer[0][0]
+    '''
+    if hasattr(res[out_blob], 'buffer') :
+        res_array = res[out_blob].buffer[0][0]      # 2021以降のバージョン
+    else :
+        res_array = res[out_blob][0][0]
+    for obj in res_array:
         conf = obj[2]                       # confidence for the predicted class(スコア)
         if conf > prob_threshold:           # 閾値より大きいものだけ処理
             class_id = int(obj[1])                          # クラスID
@@ -270,14 +300,33 @@ def main():
     
     # IR(Intermediate Representation ;中間表現)ファイル(.xml & .bin) の読み込み
     log.info(f"Loading model files:\n\t{model_xml}\n\t{model_bin}\n\t{model_label}")
-    net = IENetwork(model=model_xml, weights=model_bin)
+    # 2020.2以降、IENetwork()は非推奨となったため、ie.read_network()に差し替え
+    '''
+    if ov_vession < 2021 :         # 2020以前
+        net = IENetwork(model=model_xml, weights=model_bin)
+    else :
+        net = ie.read_network(model=model_xml, weights=model_bin)
+    '''
+    if hasattr(ie, 'read_network') :        # 2020.2以降のバージョン(IECore.read_networkメソッドがあるかで判定)
+        net = ie.read_network(model=model_xml, weights=model_bin)
+    else :
+        net = IENetwork(model=model_xml, weights=model_bin)
     
     # 未サポートレイヤの確認
     if "CPU" in args.device:
         # サポートしているレイヤの一覧
         supported_layers = ie.query_network(net, "CPU")
+        ### # netで使用されているレイヤでサポートしているレイヤの一覧にないもの
+        ### not_supported_layers = [l for l in net.layers.keys() if l not in supported_layers]
+        # netで使用されているレイヤ一覧
+        if "ngraph" in sys.modules :            # ngraphがインポート済みかで判定
+            # バージョン 2021.x以降
+            used_layers = [l.friendly_name for l in ngraph.function_from_cnn(net).get_ordered_ops()]
+        else :
+            # バージョン 2020.x以前
+            used_layers = list(net.layers.keys())
         # netで使用されているレイヤでサポートしているレイヤの一覧にないもの
-        not_supported_layers = [l for l in net.layers.keys() if l not in supported_layers]
+        not_supported_layers = [l for l in used_layers if l not in supported_layers]
         # サポートされていないレイヤがある？
         if len(not_supported_layers) != 0:
             # エラー終了
@@ -295,19 +344,44 @@ def main():
     # print(net.inputs)
     # SSDのinputsは1とは限らないのでスキャンする
     img_info_input_blob = None
-    for blob_name in net.inputs:
-        # print(f'{blob_name}   {net.inputs[blob_name].shape}')
-        if len(net.inputs[blob_name].shape) == 4:
+    '''
+    if ov_vession < 2021 :         # 2020以前
+        inputs = net.inputs
+    else :
+        inputs = net.input_info
+    '''
+    if hasattr(net, 'input_info') :        # 2021以降のバージョン
+        inputs = net.input_info
+    else :
+        inputs = net.inputs
+
+    for blob_name in inputs:
+
+        if hasattr(inputs[blob_name], 'shape') :        # 2020以前のバージョン
+            input_shape = inputs[blob_name].shape
+        else :                                          # 2021以降のバージョン
+            input_shape = inputs[blob_name].input_data.shape
+        # print(f'{blob_name}   {input_shape}')
+        if len(input_shape) == 4:
             input_blob = blob_name
-        elif len(net.inputs[blob_name].shape) == 2:
+        elif len(input_shape) == 2:
            # こういう入力レイヤがあるものがある？
            img_info_input_blob = blob_name
         else:
-            raise RuntimeError(f"Unsupported {len(net.inputs[blob_name].shape)} input layer '{ blob_name}'. Only 2D and 4D input layers are supported")
+            raise RuntimeError(f"Unsupported {len(input_shape)} input layer '{ blob_name}'. Only 2D and 4D input layers are supported")
     
     # 入力画像情報の取得
-    input_n, input_colors, input_height, input_width = net.inputs[input_blob].shape
-    
+    '''
+    if hasattr(inputs[input_blob], 'shape') :           # 2020以前のバージョン
+        input_n, input_colors, input_height, input_width = inputs[input_blob].shape
+    else :                                              # 2021以降のバージョン
+        input_n, input_colors, input_height, input_width = inputs[input_blob].input_data.shape
+    '''
+    if hasattr(inputs[input_blob], 'input_data') :
+        input_n, input_colors, input_height, input_width = inputs[input_blob].input_data.shape
+    else :
+        input_n, input_colors, input_height, input_width = inputs[input_blob].shape
+
     feed_dict = {}
     # こういう入力レイヤがあるものがある？
     if img_info_input_blob:
@@ -416,7 +490,16 @@ def main():
             
             # 検出結果の解析 =============================================================================
             parse_start = time.time()                           # 解析処理開始時刻          --------------------------------
-            res = exec_net.requests[cur_request_id].outputs
+            '''
+            if ov_vession < 2021 :         # 2020以前
+                res = exec_net.requests[cur_request_id].outputs
+            else :
+                res = exec_net.requests[cur_request_id].output_blobs
+            '''
+            if hasattr(exec_net.requests[cur_request_id], 'output_blobs') :        # 2021以降のバージョン
+                res = exec_net.requests[cur_request_id].output_blobs
+            else :
+                res = exec_net.requests[cur_request_id].outputs
             
             parse_result(net, res, disp_frame, cur_request_id, labels_map, args.prob_threshold, frame_number, log_f)
             
