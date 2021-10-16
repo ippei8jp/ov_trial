@@ -132,13 +132,13 @@ execute() {
 		local LOG_FILE=${LOG_NAME_BASE}.log
 		EXT_OPTION+=" --save ${SAVE_NAME} --time ${TIME_FILE} --log ${LOG_FILE}"
 	fi
-	python ${MAIN_SCRIPT} --device=${device} --input ${INPUT_FILE} --label ${LABEL_FILE} --model ${MODEL_FILE} ${EXT_OPTION}
+	python3 ${MAIN_SCRIPT} --device=${device} --input ${INPUT_FILE} --label ${LABEL_FILE} --model ${MODEL_FILE} ${EXT_OPTION}
 	MAIN_RET=$?
 	if [[ "${log_flag}" == "yes" ]] ; then
 		# echo "RET : ${MAIN_RET}"
 		if [ ${MAIN_RET} -eq 0 ]; then
 			# 実行時間の平均値を計算してファイルに出力
-			python -c "import sys; import pandas as pd; data = pd.read_csv(sys.argv[1], index_col=0); ave=data.mean(); print(ave)" ${TIME_FILE} > ${TIME_FILE}.average
+			python3 -c "import sys; import pandas as pd; data = pd.read_csv(sys.argv[1], index_col=0); ave=data.mean(); print(ave)" ${TIME_FILE} > ${TIME_FILE}.average
 		fi
 	fi
 	
