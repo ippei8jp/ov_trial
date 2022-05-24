@@ -24,7 +24,7 @@ PyYAML==5.4.1
 requests==2.25.1
 six==1.15.0
 tensorboard==1.15.0
-tensorflow==1.15.5
+tensorflow==2.6.4
 tensorflow-estimator==1.15.1
 termcolor==1.1.0
 typing-extensions==3.7.4.3
