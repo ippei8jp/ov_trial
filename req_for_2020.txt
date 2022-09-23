@@ -19,7 +19,7 @@ networkx==2.5
 numpy==1.18.5
 onnx==1.8.1
 opt-einsum==3.3.0
-protobuf==3.6.1
+protobuf==3.18.3
 PyYAML==5.4.1
 requests==2.25.1
 six==1.15.0
